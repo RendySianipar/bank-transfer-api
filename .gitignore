@@ -1,0 +1,14 @@
+# Environment
+.env
+
+# Go
+/bin/
+/tmp/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DB_Store
+Thumbs.db

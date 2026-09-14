@@ -94,25 +94,43 @@ func (r *AccountRepository) CreateTransfer(
 	return err
 }
 
-func (r *AccountRepository) GetAllTransfer(
-	tx *sql.Tx,
-) ([]model.Transfer, error) {
+func (r *AccountRepository) GetAllTransfer() ([]model.Transfer, error) {
 
-	rows, err := tx.Query(`SELECT * FROM transfers`)
+	rows, err := r.db.Query(
+		`SELECT id, reference_number, from_account_id, to_account_id, amount, status, created_at
+		 FROM transfers`,
+	)
 
 	if err != nil {
 		return nil, err
 	}
+
+	defer rows.Close()
 
 	var allTrf []model.Transfer
 
 	for rows.Next() {
 		var trf model.Transfer
 
-		rows.Scan(&trf.ID, &trf.FromAccountID, &trf.ToAccountID, &trf.Amount, &trf.Status, &trf.CreatedAt)
-
+		if err := rows.Scan(
+			&trf.ID,
+			&trf.ReferenceNumber,
+			&trf.FromAccountID,
+			&trf.ToAccountID,
+			&trf.Amount,
+			&trf.Status,
+			&trf.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
 		allTrf = append(allTrf, trf)
 	}
 
-	return allTrf, err
+	// rows.Next() also stops on a scan/network error mid-iteration -
+	// rows.Err() surfaces that, since the loop above would otherwise swallow it silently.
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return allTrf, nil
 }

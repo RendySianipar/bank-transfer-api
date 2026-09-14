@@ -31,11 +31,10 @@ func NewTransferService(
 
 func (s *TransferService) GetAllTransfer() ([]model.Transfer, error) {
 
-	tx, err := s.db.Begin()
+	allTrf, err := s.accountRepository.GetAllTransfer()
 	if err != nil {
 		return nil, err
 	}
-	allTrf, err := s.accountRepository.GetAllTransfer(tx)
 
 	return allTrf, err
 }
@@ -135,10 +134,6 @@ func (s *TransferService) Transfer(
 		return "", err
 	}
 
-	if err != nil {
-		return "", err
-	}
-
 	referenceNumber, err = GenerateReferenceNumber(12)
 	if err != nil {
 		return "", err
@@ -180,11 +175,3 @@ func (s *TransferService) Transfer(
 
 	return transfer.ReferenceNumber, nil
 }
-
-// func GenerateReferenceNumber() string {
-// 	now := time.Now()
-
-// 	randomNumber := rand.Intn(1000000)
-
-// 	return fmt.Sprintf("TRX-%s-%06d", now.Format("20060102"), randomNumber)
-// }

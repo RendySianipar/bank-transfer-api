@@ -47,7 +47,7 @@ func (r *AccountRepository) GetAccountForUpdate(
 func (r *AccountRepository) DeductBalance(
 	tx *sql.Tx,
 	accountID string,
-	amount float64,
+	amount int64,
 ) error {
 
 	_, err := tx.Exec(
@@ -64,7 +64,7 @@ func (r *AccountRepository) DeductBalance(
 func (r *AccountRepository) AddBalance(
 	tx *sql.Tx,
 	accountID string,
-	amount float64,
+	amount int64,
 ) error {
 
 	_, err := tx.Exec(

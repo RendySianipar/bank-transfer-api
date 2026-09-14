@@ -44,13 +44,26 @@ func (s *TransferService) Transfer(
 	idempotencyKey string,
 ) (string, error) {
 
-	// 1. Basic validation
+	// Validate account IDs
+	if req.FromAccountID == "" {
+		return "", errors.New("from account ID is required")
+	}
+
+	if req.ToAccountID == "" {
+		return "", errors.New("to account ID is required")
+	}
+
+	if req.FromAccountID == req.ToAccountID {
+		return "", errors.New("sender and recepient cannot be the same")
+	}
+
+	// Validate amount
 	if req.Amount <= 0 {
 		return "", errors.New("amount must be greater than 0")
 	}
 
-	if req.FromAccountID == req.ToAccountID {
-		return "", errors.New("sender and recipient cannot be the same")
+	if req.Amount > 10000000 {
+		return "", errors.New("amount exceeds maximum transfer limit")
 	}
 
 	// 2. Start transaction
@@ -92,6 +105,10 @@ func (s *TransferService) Transfer(
 
 	if fromAccount.Status != "active" {
 		return "", errors.New("sender account is not active")
+	}
+
+	if fromAccount.Balance < req.Amount {
+		return "", errors.New("insufficient balance")
 	}
 
 	// Get recipient

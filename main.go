@@ -5,6 +5,7 @@ import (
 	service "bank-transfer-api/Service"
 	"bank-transfer-api/database"
 	"bank-transfer-api/handler"
+	"bank-transfer-api/middleware"
 	"fmt"
 	"log"
 	"net/http"
@@ -19,6 +20,14 @@ func main() {
 
 	defer db.Close()
 
+	// Auth
+	userRepository := repository.NewUserRepository(db)
+	authService := service.NewAuthService(userRepository)
+
+	http.HandleFunc("/register", handler.RegisterHandler(authService))
+	http.HandleFunc("/login", handler.LoginHandler(authService))
+
+	// Transfer
 	accountRepository := repository.NewAccountRepository(db)
 	idempotencyRepository := repository.NewIdempotencyRepository(db)
 
@@ -28,10 +37,7 @@ func main() {
 		idempotencyRepository,
 	)
 
-	http.HandleFunc(
-		"/transfer",
-		handler.TransferHandler(transferService),
-	)
+	http.HandleFunc("/transfer", middleware.JWTMiddleware(handler.TransferHandler(transferService)))
 
 	http.HandleFunc(
 		"/getAllTransfer",

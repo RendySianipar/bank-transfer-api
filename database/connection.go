@@ -23,7 +23,7 @@ func Connect() (*sql.DB, error) {
 	dbName := os.Getenv("DB_NAME")
 
 	dsn := fmt.Sprintf(
-		"%s:%s@tcp(%s:%s)/%s",
+		"%s:%s@tcp(%s:%s)/%s?parseTime=true&loc=Asia%%2FJakarta",
 		user,
 		password,
 		host,

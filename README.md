@@ -33,6 +33,9 @@ MySQL
 - Transfer history
 - Transaction reference number
 - Idempotency key
+- Validation account, amount, and balance
+- Money Handling
+- Authentication and Authorization
 
 ## Project Structure
 

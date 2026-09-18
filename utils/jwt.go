@@ -1,12 +1,12 @@
 package utils
 
 import (
+	"errors"
+	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
-
-var jwtSecret = []byte("JcJhYv9j6qXL9aFkJungBtstb9kiOPFUuF8oL0rbGVU")
 
 type Claims struct {
 	UserID   string `json:"user_id"`
@@ -15,6 +15,13 @@ type Claims struct {
 }
 
 func GenerateToken(userID, username string) (string, error) {
+
+	jwtSecret := os.Getenv("JWT_SECRET")
+
+	if jwtSecret == "" {
+		return "", errors.New("JWT_SECRET is not configured")
+	}
+
 	claims := Claims{
 		UserID:   userID,
 		Username: username,
@@ -25,15 +32,29 @@ func GenerateToken(userID, username string) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(jwtSecret)
+	return token.SignedString([]byte(jwtSecret))
 }
 
 func ValidateToken(tokenString string) (*Claims, error) {
 	claims := &Claims{}
 
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		return jwtSecret, nil
-	})
+	token, err := jwt.ParseWithClaims(
+		tokenString,
+		claims,
+		func(token *jwt.Token) (interface{}, error) {
+			if token.Method != jwt.SigningMethodHS256 {
+				return nil, jwt.ErrSignatureInvalid
+			}
+
+			jwtSecret := os.Getenv("JWT_SECRET")
+
+			if jwtSecret == "" {
+				return nil, errors.New("JWT_SECRET is not configured")
+			}
+
+			return []byte(jwtSecret), nil
+		},
+	)
 
 	if err != nil {
 		return nil, err

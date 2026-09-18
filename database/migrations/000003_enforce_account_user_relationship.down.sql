@@ -1,0 +1,3 @@
+ALTER TABLE accounts DROP FOREIGN KEY fk_accounts_user;
+
+ALTER TABLE accounts MODIFY COLUMN user_id VARCHAR(36) NULL;

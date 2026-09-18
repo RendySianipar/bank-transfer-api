@@ -21,7 +21,7 @@ func JWTMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		// Format header yang diharapkan: "Bearer <token>"
-		parts := strings.Split(authHeader, " ")
+		parts := strings.Fields(authHeader)
 		if len(parts) != 2 || parts[0] != "Bearer" {
 			http.Error(w, "invalid authorization header format", http.StatusUnauthorized)
 			return
@@ -35,8 +35,8 @@ func JWTMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		// Titipkan userID ke context, supaya handler di belakangnya
-		// bisa tahu "siapa yang sedang request ini" kalau perlu.
+		// Store the userID in the context so that downstream handlers
+		// can know "who is making this request" if necessary.
 		ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}

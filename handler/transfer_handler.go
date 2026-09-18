@@ -2,6 +2,7 @@ package handler
 
 import (
 	service "bank-transfer-api/Service"
+	"bank-transfer-api/middleware"
 	"bank-transfer-api/model"
 	"encoding/json"
 	"net/http"
@@ -53,7 +54,12 @@ func TransferHandler(service *service.TransferService) http.HandlerFunc {
 			return
 		}
 
-		referenceNumber, err := service.Transfer(req, idempotencyKey)
+		userID, ok := r.Context().Value(middleware.UserIDKey).(string)
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+		}
+
+		referenceNumber, err := service.Transfer(req, userID, idempotencyKey)
 
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)

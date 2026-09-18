@@ -1,0 +1,2 @@
+ALTER TABLE accounts
+ADD COLUMN user_id VARCHAR(36) NULL;

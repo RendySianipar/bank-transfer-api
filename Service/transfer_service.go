@@ -41,6 +41,7 @@ func (s *TransferService) GetAllTransfer() ([]model.Transfer, error) {
 
 func (s *TransferService) Transfer(
 	req model.TransferRequest,
+	userID string,
 	idempotencyKey string,
 ) (string, error) {
 
@@ -90,9 +91,10 @@ func (s *TransferService) Transfer(
 	}
 
 	// Get sender
-	fromAccount, err := s.accountRepository.GetAccountForUpdate(
+	fromAccount, err := s.accountRepository.GetAccountForUpdateByUser(
 		tx,
 		req.FromAccountID,
+		userID,
 	)
 
 	if err == sql.ErrNoRows {

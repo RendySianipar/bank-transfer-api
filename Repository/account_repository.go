@@ -31,10 +31,41 @@ func (r *AccountRepository) GetAccountForUpdate(
 		FOR UPDATE`,
 		accountID,
 	).Scan(
-		&accountID,
+		&account.ID,
 		&account.OwnerName,
 		&account.Balance,
 		&account.Status,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &account, nil
+}
+
+func (r *AccountRepository) GetAccountForUpdateByUser(
+	tx *sql.Tx,
+	accountID string,
+	userID string,
+) (*model.Account, error) {
+
+	var account model.Account
+
+	err := tx.QueryRow(
+		`SELECT id, owner_name, balance, status, user_id
+		FROM accounts
+		WHERE id = ?
+			AND user_id = ?
+		FOR UPDATE`,
+		accountID,
+		userID,
+	).Scan(
+		&account.ID,
+		&account.OwnerName,
+		&account.Balance,
+		&account.Status,
+		&account.UserID,
 	)
 
 	if err != nil {

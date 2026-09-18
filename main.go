@@ -9,11 +9,18 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	db, err := database.Connect()
 
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	db, err := database.Connect()
 	if err != nil {
 		log.Fatal("failed to connect database: ", err)
 	}
@@ -40,8 +47,8 @@ func main() {
 	http.HandleFunc("/transfer", middleware.JWTMiddleware(handler.TransferHandler(transferService)))
 
 	http.HandleFunc(
-		"/getAllTransfer",
-		handler.GetAllTransfer(transferService),
+		"/getAllTransfer", middleware.JWTMiddleware(
+			handler.GetAllTransfer(transferService)),
 	)
 
 	fmt.Println("server started at :7070")

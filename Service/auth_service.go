@@ -28,8 +28,8 @@ func (s *AuthService) Register(req model.RegisterRequest) error {
 		return errors.New("password must be at least 8 characters")
 	}
 
-	// bcrypt.GenerateFromPassword otomatis nambahin "salt" random,
-	// jadi 2 user dengan password sama tetap punya hash yang BEDA.
+	// bcrypt.GenerateFromPassword automatically adds a random salt,
+	// so two users with the same password will still have DIFFERENT hashes.
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return err

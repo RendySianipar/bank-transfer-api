@@ -6,15 +6,9 @@ import (
 	"os"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/joho/godotenv"
 )
 
 func Connect() (*sql.DB, error) {
-
-	err := godotenv.Load()
-	if err != nil {
-		return nil, err
-	}
 
 	host := os.Getenv("DB_HOST")
 	port := os.Getenv("DB_PORT")

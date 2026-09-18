@@ -7,6 +7,7 @@ type Account struct {
 	OwnerName string `json:"owner_name"`
 	Balance   int64  `json:"balance"`
 	Status    string `json:"status"`
+	UserID    string `json:"user_id"`
 }
 
 type TransferRequest struct {

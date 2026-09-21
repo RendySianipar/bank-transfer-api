@@ -1,7 +1,6 @@
 package service
 
 import (
-	repository "bank-transfer-api/Repository"
 	"bank-transfer-api/model"
 	"database/sql"
 	"errors"
@@ -11,16 +10,34 @@ import (
 	"github.com/google/uuid"
 )
 
+// type TransferService struct {
+// 	db                    *sql.DB
+// 	accountRepository     *repository.AccountRepository
+// 	idempotencyRepository *repository.IdempotencyRepository
+// }
+
 type TransferService struct {
 	db                    *sql.DB
-	accountRepository     *repository.AccountRepository
-	idempotencyRepository *repository.IdempotencyRepository
+	accountRepository     AccountRepositoryInterface
+	idempotencyRepository IdempotencyRepositoryInterface
 }
+
+// func NewTransferService(
+// 	db *sql.DB,
+// 	accountRepository *repository.AccountRepository,
+// 	idempotencyRepository *repository.IdempotencyRepository,
+// ) *TransferService {
+// 	return &TransferService{
+// 		db:                    db,
+// 		accountRepository:     accountRepository,
+// 		idempotencyRepository: idempotencyRepository,
+// 	}
+// }
 
 func NewTransferService(
 	db *sql.DB,
-	accountRepository *repository.AccountRepository,
-	idempotencyRepository *repository.IdempotencyRepository,
+	accountRepository AccountRepositoryInterface,
+	idempotencyRepository IdempotencyRepositoryInterface,
 ) *TransferService {
 	return &TransferService{
 		db:                    db,

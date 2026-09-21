@@ -36,6 +36,7 @@ MySQL
 - Validation account, amount, and balance
 - Money Handling
 - Authentication and Authorization
+- Concurrency Testing
 
 ## Project Structure
 

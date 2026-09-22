@@ -37,6 +37,8 @@ MySQL
 - Money Handling
 - Authentication and Authorization
 - Concurrency Testing
+- Unit tests
+- Integration tests
 
 ## Project Structure
 

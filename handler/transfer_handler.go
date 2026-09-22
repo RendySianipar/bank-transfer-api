@@ -57,6 +57,7 @@ func TransferHandler(service *service.TransferService) http.HandlerFunc {
 		userID, ok := r.Context().Value(middleware.UserIDKey).(string)
 		if !ok {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
 		}
 
 		referenceNumber, err := service.Transfer(req, userID, idempotencyKey)

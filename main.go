@@ -15,10 +15,18 @@ import (
 
 func main() {
 
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal(err)
-	}
+	// err := godotenv.Load()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	// godotenv.Load() is intentionally NOT fatal on error here. Locally
+	// (outside Docker), .env exists and gets loaded normally. Inside a
+	// Docker container, there is deliberately no .env file - env vars
+	// are injected directly by docker-compose instead - so Load() will
+	// fail to find the file, and that failure is expected, not an error
+	// condition worth crashing the app over.
+	_ = godotenv.Load()
 
 	db, err := database.Connect()
 	if err != nil {

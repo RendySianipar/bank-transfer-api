@@ -1,0 +1,16 @@
+# Never send real secrets into the build context
+.env
+.env.test
+.env.docker
+
+# Version control metadata - large and irrelevant to the build
+.git
+.gitignore
+
+# Editor/IDE config
+.vscode
+.idea
+
+# Not needed to build/run the server binary
+README.md
+cmd/concurrency_test

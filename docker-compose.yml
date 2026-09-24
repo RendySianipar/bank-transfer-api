@@ -1,0 +1,52 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      # ${DB_PASSWORD} is pulled automatically from the .env file sitting
+      # next to this docker-compose.yml - this is Docker Compose's OWN
+      # built-in .env substitution mechanism, separate from (and simpler
+      # than) godotenv inside the Go app itself. Only the specific
+      # variables referenced with ${...} below get pulled in - DB_HOST,
+      # DB_PORT etc. from your local .env are simply ignored here since
+      # they're never referenced this way.
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: bank_transfer_db
+    volumes:
+      # Named volume - MySQL's actual data files persist across
+      # `docker compose down`/`up` cycles (but NOT `docker compose down -v`).
+      - mysql_data:/var/lib/mysql
+      # MySQL's official image automatically runs any .sql/.sh files
+      # found here, in alphabetical order, but ONLY on first startup
+      # (when the data volume above is empty).
+      - ./database/docker-init:/docker-entrypoint-initdb.d
+    ports:
+      - "3307:3306" # optional - lets you still connect via MySQL Workbench to inspect data
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        # Waits for the healthcheck above to actually pass, not just for
+        # the mysql CONTAINER to start - MySQL takes a few seconds after
+        # starting before it's ready to accept connections, so without
+        # this, the app would race ahead and fail to connect.
+        condition: service_healthy
+    environment:
+      DB_HOST: mysql # the service name above - Docker's internal DNS resolves this automatically
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_NAME: bank_transfer_db
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "7070:7070"
+
+volumes:
+  mysql_data:

@@ -2,6 +2,7 @@ package service
 
 import (
 	"bank-transfer-api/model"
+	"context"
 	"database/sql"
 	"errors"
 	"testing"
@@ -189,8 +190,9 @@ func TestTransfer_Validation(t *testing.T) {
 			svc, _, mock := newTestService(t)
 			// No ExpectBegin()/ExpectRollback() here - all these cases
 			// fail validation BEFORE tx.Begin() is ever reached.
+			
 
-			_, err := svc.Transfer(tt.req, tt.userID, "idem-"+tt.name)
+			_, err := svc.Transfer(context.Background(),tt.req, tt.userID, "idem-"+tt.name)
 
 			if err == nil {
 				t.Fatalf("expected error %q, got nil", tt.wantErr)
@@ -213,7 +215,7 @@ func TestTransfer_InsufficientBalance(t *testing.T) {
 
 	req := model.TransferRequest{FromAccountID: "ACC001", ToAccountID: "ACC002", Amount: 2000000} // more than the seeded 1,000,000
 
-	_, err := svc.Transfer(req, "user-1", "idem-insufficient")
+	_, err := svc.Transfer(context.Background(),req, "user-1", "idem-insufficient")
 
 	if err == nil {
 		t.Fatal("expected insufficient balance error, got nil")
@@ -235,7 +237,7 @@ func TestTransfer_WrongOwner(t *testing.T) {
 	// authorization check (GetAccountForUpdateByUser).
 	req := model.TransferRequest{FromAccountID: "ACC001", ToAccountID: "ACC002", Amount: 1000}
 
-	_, err := svc.Transfer(req, "user-2", "idem-wrong-owner")
+	_, err := svc.Transfer(context.Background(),req, "user-2", "idem-wrong-owner")
 
 	if err == nil {
 		t.Fatal("expected sender account not found error, got nil")
@@ -255,7 +257,7 @@ func TestTransfer_Success(t *testing.T) {
 
 	req := model.TransferRequest{FromAccountID: "ACC001", ToAccountID: "ACC002", Amount: 200000}
 
-	refNumber, err := svc.Transfer(req, "user-1", "idem-success-1")
+	refNumber, err := svc.Transfer(context.Background(),req, "user-1", "idem-success-1")
 
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -288,7 +290,7 @@ func TestTransfer_IdempotentReplay(t *testing.T) {
 	// First call: goes all the way through, commits.
 	mock.ExpectBegin()
 	mock.ExpectCommit()
-	firstRef, err := svc.Transfer(req, "user-1", idemKey)
+	firstRef, err := svc.Transfer(context.Background(),req, "user-1", idemKey)
 	if err != nil {
 		t.Fatalf("first call: expected no error, got %v", err)
 	}
@@ -299,7 +301,7 @@ func TestTransfer_IdempotentReplay(t *testing.T) {
 	// (harmlessly, since nothing was written in this branch).
 	mock.ExpectBegin()
 	mock.ExpectRollback()
-	secondRef, err := svc.Transfer(req, "user-1", idemKey)
+	secondRef, err := svc.Transfer(context.Background(),req, "user-1", idemKey)
 	if err != nil {
 		t.Fatalf("second call: expected no error, got %v", err)
 	}

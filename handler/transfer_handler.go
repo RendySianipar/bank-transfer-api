@@ -60,7 +60,13 @@ func TransferHandler(service *service.TransferService) http.HandlerFunc {
 			return
 		}
 
-		referenceNumber, err := service.Transfer(req, userID, idempotencyKey)
+		// Pass r.Context() as the first parameter
+		referenceNumber, err := service.Transfer(
+			r.Context(),
+			req,
+			userID,
+			idempotencyKey,
+		)
 
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)

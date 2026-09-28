@@ -6,43 +6,44 @@ import (
 	"bank-transfer-api/database"
 	"bank-transfer-api/handler"
 	"bank-transfer-api/middleware"
-	"fmt"
-	"log"
+	"bank-transfer-api/observability"
+	"context"
 	"net/http"
+	"time"
 
 	"github.com/joho/godotenv"
 )
 
 func main() {
-
-	// err := godotenv.Load()
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// godotenv.Load() is intentionally NOT fatal on error here. Locally
-	// (outside Docker), .env exists and gets loaded normally. Inside a
-	// Docker container, there is deliberately no .env file - env vars
-	// are injected directly by docker-compose instead - so Load() will
-	// fail to find the file, and that failure is expected, not an error
-	// condition worth crashing the app over.
 	_ = godotenv.Load()
+
+	logger := observability.NewLogger()
+
+	ctx := context.Background()
+	shutdownTelemetry, err := observability.Setup(ctx)
+	if err != nil {
+		logger.Error("telemetry initialization failed", "error", err)
+		return
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := shutdownTelemetry(shutdownCtx); err != nil {
+			logger.Error("telemetry shutdown failed", "error", err)
+		}
+	}()
 
 	db, err := database.Connect()
 	if err != nil {
-		log.Fatal("failed to connect database: ", err)
+		logger.Error("database connection failed", "error", err)
+		return
 	}
-
 	defer db.Close()
 
-	// Auth
 	userRepository := repository.NewUserRepository(db)
 	authService := service.NewAuthService(userRepository)
 
-	http.HandleFunc("/register", handler.RegisterHandler(authService))
-	http.HandleFunc("/login", handler.LoginHandler(authService))
-
-	// Transfer
 	accountRepository := repository.NewAccountRepository(db)
 	idempotencyRepository := repository.NewIdempotencyRepository(db)
 
@@ -52,16 +53,35 @@ func main() {
 		idempotencyRepository,
 	)
 
-	http.HandleFunc("/transfer", middleware.JWTMiddleware(handler.TransferHandler(transferService)))
+	mux := http.NewServeMux()
 
-	http.HandleFunc(
-		"/getAllTransfer", middleware.JWTMiddleware(
-			handler.GetAllTransfer(transferService)),
+	mux.HandleFunc("/register", handler.RegisterHandler(authService))
+	mux.HandleFunc("/login", handler.LoginHandler(authService))
+	mux.Handle(
+		"/transfer",
+		middleware.JWTMiddleware(
+			handler.TransferHandler(transferService),
+		),
+	)
+	mux.Handle(
+		"/getAllTransfer",
+		middleware.JWTMiddleware(
+			handler.GetAllTransfer(transferService),
+		),
 	)
 
-	fmt.Println("server started at :7070")
-	if err := http.ListenAndServe(":7070", nil); err != nil {
-		log.Fatal(err)
+	handler := middleware.Tracing(
+		middleware.Logging(logger, mux),
+	)
+
+	server := &http.Server{
+		Addr:    ":7070",
+		Handler: handler,
 	}
 
+	logger.Info("server started", "address", server.Addr)
+
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		logger.Error("server stopped", "error", err)
+	}
 }

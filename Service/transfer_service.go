@@ -2,37 +2,25 @@ package service
 
 import (
 	"bank-transfer-api/model"
+	"context"
 	"database/sql"
 	"errors"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
-// type TransferService struct {
-// 	db                    *sql.DB
-// 	accountRepository     *repository.AccountRepository
-// 	idempotencyRepository *repository.IdempotencyRepository
-// }
+// Create the tracer at package level (once, not in every function)
+var tracer = otel.Tracer("bank-transfer-api/transfer")
 
 type TransferService struct {
 	db                    *sql.DB
 	accountRepository     AccountRepositoryInterface
 	idempotencyRepository IdempotencyRepositoryInterface
 }
-
-// func NewTransferService(
-// 	db *sql.DB,
-// 	accountRepository *repository.AccountRepository,
-// 	idempotencyRepository *repository.IdempotencyRepository,
-// ) *TransferService {
-// 	return &TransferService{
-// 		db:                    db,
-// 		accountRepository:     accountRepository,
-// 		idempotencyRepository: idempotencyRepository,
-// 	}
-// }
 
 func NewTransferService(
 	db *sql.DB,
@@ -47,7 +35,6 @@ func NewTransferService(
 }
 
 func (s *TransferService) GetAllTransfer() ([]model.Transfer, error) {
-
 	allTrf, err := s.accountRepository.GetAllTransfer()
 	if err != nil {
 		return nil, err
@@ -56,42 +43,69 @@ func (s *TransferService) GetAllTransfer() ([]model.Transfer, error) {
 	return allTrf, err
 }
 
+// Updated: now accepts ctx as first parameter
 func (s *TransferService) Transfer(
+	ctx context.Context,
 	req model.TransferRequest,
 	userID string,
 	idempotencyKey string,
 ) (string, error) {
+	// Create a span for this transfer operation
+	ctx, span := tracer.Start(ctx, "transfer")
+	defer span.End()
+
+	// Set span attributes (what data is being transferred)
+	span.SetAttributes(
+		attribute.String("transfer.from_account", req.FromAccountID),
+		attribute.String("transfer.to_account", req.ToAccountID),
+		attribute.Int64("transfer.amount", req.Amount),
+	)
 
 	// Validate account IDs
 	if req.FromAccountID == "" {
-		return "", errors.New("from account ID is required")
+		err := errors.New("from account ID is required")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "validation failed")
+		return "", err
 	}
 
 	if req.ToAccountID == "" {
-		return "", errors.New("to account ID is required")
+		err := errors.New("to account ID is required")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "validation failed")
+		return "", err
 	}
 
 	if req.FromAccountID == req.ToAccountID {
-		return "", errors.New("sender and recepient cannot be the same")
+		err := errors.New("sender and recepient cannot be the same")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "validation failed")
+		return "", err
 	}
 
 	// Validate amount
 	if req.Amount <= 0 {
-		return "", errors.New("amount must be greater than 0")
-	}
-
-	if req.Amount > 10000000 {
-		return "", errors.New("amount exceeds maximum transfer limit")
-	}
-
-	// 2. Start transaction
-	tx, err := s.db.Begin()
-	if err != nil {
+		err := errors.New("amount must be greater than 0")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "validation failed")
 		return "", err
 	}
 
-	// Safety net:
-	// If Commit() is not called, transaction will be rolled back.
+	if req.Amount > 10000000 {
+		err := errors.New("amount exceeds maximum transfer limit")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "validation failed")
+		return "", err
+	}
+
+	// Start transaction
+	tx, err := s.db.Begin()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "transaction begin failed")
+		return "", err
+	}
+
 	defer tx.Rollback()
 
 	referenceNumber, err := s.idempotencyRepository.GetReferenceNumber(
@@ -100,10 +114,13 @@ func (s *TransferService) Transfer(
 	)
 
 	if err == nil {
+		span.SetStatus(codes.Ok, "idempotency hit")
 		return referenceNumber, err
 	}
 
 	if err != sql.ErrNoRows {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "idempotency lookup failed")
 		return "", err
 	}
 
@@ -115,19 +132,30 @@ func (s *TransferService) Transfer(
 	)
 
 	if err == sql.ErrNoRows {
-		return "", errors.New("sender account not found")
+		err := errors.New("sender account not found")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "sender account not found")
+		return "", err
 	}
 
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "sender lookup failed")
 		return "", err
 	}
 
 	if fromAccount.Status != "active" {
-		return "", errors.New("sender account is not active")
+		err := errors.New("sender account is not active")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "sender account inactive")
+		return "", err
 	}
 
 	if fromAccount.Balance < req.Amount {
-		return "", errors.New("insufficient balance")
+		err := errors.New("insufficient balance")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "insufficient balance")
+		return "", err
 	}
 
 	// Get recipient
@@ -137,15 +165,23 @@ func (s *TransferService) Transfer(
 	)
 
 	if err == sql.ErrNoRows {
-		return "", errors.New("recipient account not found")
+		err := errors.New("recipient account not found")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "recipient account not found")
+		return "", err
 	}
 
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "recipient lookup failed")
 		return "", err
 	}
 
 	if toAccount.Status != "active" {
-		return "", errors.New("recipient account is not active")
+		err := errors.New("recipient account is not active")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "recipient account inactive")
+		return "", err
 	}
 
 	// Deduct sender
@@ -156,6 +192,8 @@ func (s *TransferService) Transfer(
 	)
 
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "deduct balance failed")
 		return "", err
 	}
 
@@ -167,11 +205,15 @@ func (s *TransferService) Transfer(
 	)
 
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "add balance failed")
 		return "", err
 	}
 
 	referenceNumber, err = GenerateReferenceNumber(12)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "generate reference failed")
 		return "", err
 	}
 
@@ -191,6 +233,8 @@ func (s *TransferService) Transfer(
 	)
 
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "create transfer failed")
 		return "", err
 	}
 
@@ -201,13 +245,20 @@ func (s *TransferService) Transfer(
 	)
 
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "save idempotency failed")
 		return "", err
 	}
 
 	// Commit
 	if err := tx.Commit(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "commit failed")
 		return "", err
 	}
+
+	// Mark span as successful
+	span.SetStatus(codes.Ok, "transfer completed successfully")
 
 	return transfer.ReferenceNumber, nil
 }

@@ -49,6 +49,12 @@ func main() {
 	}
 	defer db.Close()
 
+	// Start monitoring database pool every 30 seconds
+	observability.MonitorDatabasePool(db, logger, 30*time.Second)
+
+	// Start alerting on database pool problems every 10 seconds
+	observability.AlertOnDatabasePoolProblems(db, logger, 10*time.Second)
+
 	userRepository := repository.NewUserRepository(db)
 	authService := service.NewAuthService(userRepository)
 
@@ -64,6 +70,11 @@ func main() {
 
 	mux := http.NewServeMux()
 
+	// Health check endpoints
+	mux.HandleFunc("/health/live", handler.LivenessHandler)
+	mux.HandleFunc("/health/ready", handler.ReadinessHandler(db))
+
+	// API endpoints
 	mux.HandleFunc("/register", handler.RegisterHandler(authService))
 	mux.HandleFunc("/login", handler.LoginHandler(authService))
 	mux.Handle(

@@ -37,6 +37,10 @@ RUN apk add --no-cache ca-certificates tzdata
 
 COPY --from=builder /app/server .
 
+# Add healthcheck
+HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:7070/health/ready || exit 1
+
 EXPOSE 7070
 
 CMD ["./server"]

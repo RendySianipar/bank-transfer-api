@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -34,15 +35,11 @@ func Connect() (*sql.DB, error) {
 		return nil, err
 	}
 
-	// dsn := "root:drillbit@tcp(127.0.0.1:3306)/bank_transfer_db"
-	// db, err := sql.Open("mysql", dsn)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// if err := db.Ping(); err != nil {
-	// 	return nil, err
-	// }
+	// Configure connection pool
+	db.SetMaxOpenConns(25)                  // Maximum number of open connections
+	db.SetMaxIdleConns(10)                  // Maximum number of idle connections
+	db.SetConnMaxLifetime(30 * time.Minute) // How long a connection can be used
+	db.SetConnMaxIdleTime(5 * time.Minute)  // How long a connection can be idle before being closed
 
 	return db, nil
 }

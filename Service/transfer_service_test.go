@@ -2,6 +2,7 @@ package service
 
 import (
 	"bank-transfer-api/model"
+	"bank-transfer-api/observability"
 	"context"
 	"database/sql"
 	"errors"
@@ -30,7 +31,7 @@ func newFakeAccountRepository() *fakeAccountRepository {
 	}
 }
 
-func (f *fakeAccountRepository) GetAccountForUpdate(tx *sql.Tx, accountID string) (*model.Account, error) {
+func (f *fakeAccountRepository) GetAccountForUpdate(ctx context.Context, tx *sql.Tx, accountID string) (*model.Account, error) {
 	acc, ok := f.accounts[accountID]
 	if !ok {
 		return nil, sql.ErrNoRows
@@ -39,7 +40,7 @@ func (f *fakeAccountRepository) GetAccountForUpdate(tx *sql.Tx, accountID string
 	return &accCopy, nil
 }
 
-func (f *fakeAccountRepository) GetAccountForUpdateByUser(tx *sql.Tx, accountID string, userID string) (*model.Account, error) {
+func (f *fakeAccountRepository) GetAccountForUpdateByUser(ctx context.Context, tx *sql.Tx, accountID string, userID string) (*model.Account, error) {
 	acc, ok := f.accounts[accountID]
 	if !ok || acc.UserID != userID {
 		return nil, sql.ErrNoRows
@@ -48,7 +49,7 @@ func (f *fakeAccountRepository) GetAccountForUpdateByUser(tx *sql.Tx, accountID 
 	return &accCopy, nil
 }
 
-func (f *fakeAccountRepository) DeductBalance(tx *sql.Tx, accountID string, amount int64) error {
+func (f *fakeAccountRepository) DeductBalance(ctx context.Context, tx *sql.Tx, accountID string, amount int64) error {
 	acc, ok := f.accounts[accountID]
 	if !ok {
 		return sql.ErrNoRows
@@ -57,7 +58,7 @@ func (f *fakeAccountRepository) DeductBalance(tx *sql.Tx, accountID string, amou
 	return nil
 }
 
-func (f *fakeAccountRepository) AddBalance(tx *sql.Tx, accountID string, amount int64) error {
+func (f *fakeAccountRepository) AddBalance(ctx context.Context, tx *sql.Tx, accountID string, amount int64) error {
 	acc, ok := f.accounts[accountID]
 	if !ok {
 		return sql.ErrNoRows
@@ -66,7 +67,7 @@ func (f *fakeAccountRepository) AddBalance(tx *sql.Tx, accountID string, amount 
 	return nil
 }
 
-func (f *fakeAccountRepository) CreateTransfer(tx *sql.Tx, transfer model.Transfer) error {
+func (f *fakeAccountRepository) CreateTransfer(ctx context.Context, tx *sql.Tx, transfer model.Transfer) error {
 	f.transfers = append(f.transfers, transfer)
 	return nil
 }
@@ -83,7 +84,7 @@ func newFakeIdempotencyRepository() *fakeIdempotencyRepository {
 	return &fakeIdempotencyRepository{keys: make(map[string]string)}
 }
 
-func (f *fakeIdempotencyRepository) GetReferenceNumber(tx *sql.Tx, idempotencyKey string) (string, error) {
+func (f *fakeIdempotencyRepository) GetReferenceNumber(ctx context.Context, tx *sql.Tx, idempotencyKey string) (string, error) {
 	ref, ok := f.keys[idempotencyKey]
 	if !ok {
 		return "", sql.ErrNoRows
@@ -91,7 +92,7 @@ func (f *fakeIdempotencyRepository) GetReferenceNumber(tx *sql.Tx, idempotencyKe
 	return ref, nil
 }
 
-func (f *fakeIdempotencyRepository) Create(tx *sql.Tx, idempotencyKey string, referenceNumber string) error {
+func (f *fakeIdempotencyRepository) Create(ctx context.Context, tx *sql.Tx, idempotencyKey string, referenceNumber string) error {
 	f.keys[idempotencyKey] = referenceNumber
 	return nil
 }
@@ -128,7 +129,16 @@ func newTestService(t *testing.T) (svc *TransferService, accountRepo *fakeAccoun
 
 	idempotencyRepo := newFakeIdempotencyRepository()
 
-	svc = NewTransferService(db, accountRepo, idempotencyRepo)
+	// Create context for metrics
+	ctx := context.Background()
+
+	// Initialize metrics
+	metrics, err := observability.NewMetrics(ctx)
+	if err != nil {
+		t.Fatalf("failed to create metrics: %v", err)
+	}
+
+	svc = NewTransferService(db, accountRepo, idempotencyRepo, metrics)
 
 	return svc, accountRepo, mock
 }
@@ -190,9 +200,8 @@ func TestTransfer_Validation(t *testing.T) {
 			svc, _, mock := newTestService(t)
 			// No ExpectBegin()/ExpectRollback() here - all these cases
 			// fail validation BEFORE tx.Begin() is ever reached.
-			
 
-			_, err := svc.Transfer(context.Background(),tt.req, tt.userID, "idem-"+tt.name)
+			_, err := svc.Transfer(context.Background(), tt.req, tt.userID, "idem-"+tt.name)
 
 			if err == nil {
 				t.Fatalf("expected error %q, got nil", tt.wantErr)
@@ -215,7 +224,7 @@ func TestTransfer_InsufficientBalance(t *testing.T) {
 
 	req := model.TransferRequest{FromAccountID: "ACC001", ToAccountID: "ACC002", Amount: 2000000} // more than the seeded 1,000,000
 
-	_, err := svc.Transfer(context.Background(),req, "user-1", "idem-insufficient")
+	_, err := svc.Transfer(context.Background(), req, "user-1", "idem-insufficient")
 
 	if err == nil {
 		t.Fatal("expected insufficient balance error, got nil")
@@ -237,7 +246,7 @@ func TestTransfer_WrongOwner(t *testing.T) {
 	// authorization check (GetAccountForUpdateByUser).
 	req := model.TransferRequest{FromAccountID: "ACC001", ToAccountID: "ACC002", Amount: 1000}
 
-	_, err := svc.Transfer(context.Background(),req, "user-2", "idem-wrong-owner")
+	_, err := svc.Transfer(context.Background(), req, "user-2", "idem-wrong-owner")
 
 	if err == nil {
 		t.Fatal("expected sender account not found error, got nil")
@@ -257,7 +266,7 @@ func TestTransfer_Success(t *testing.T) {
 
 	req := model.TransferRequest{FromAccountID: "ACC001", ToAccountID: "ACC002", Amount: 200000}
 
-	refNumber, err := svc.Transfer(context.Background(),req, "user-1", "idem-success-1")
+	refNumber, err := svc.Transfer(context.Background(), req, "user-1", "idem-success-1")
 
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -290,7 +299,7 @@ func TestTransfer_IdempotentReplay(t *testing.T) {
 	// First call: goes all the way through, commits.
 	mock.ExpectBegin()
 	mock.ExpectCommit()
-	firstRef, err := svc.Transfer(context.Background(),req, "user-1", idemKey)
+	firstRef, err := svc.Transfer(context.Background(), req, "user-1", idemKey)
 	if err != nil {
 		t.Fatalf("first call: expected no error, got %v", err)
 	}
@@ -301,7 +310,7 @@ func TestTransfer_IdempotentReplay(t *testing.T) {
 	// (harmlessly, since nothing was written in this branch).
 	mock.ExpectBegin()
 	mock.ExpectRollback()
-	secondRef, err := svc.Transfer(context.Background(),req, "user-1", idemKey)
+	secondRef, err := svc.Transfer(context.Background(), req, "user-1", idemKey)
 	if err != nil {
 		t.Fatalf("second call: expected no error, got %v", err)
 	}
@@ -328,7 +337,7 @@ func TestTransfer_IdempotentReplay(t *testing.T) {
 func TestFakeAccountRepository_NotFound(t *testing.T) {
 	repo := newFakeAccountRepository()
 
-	_, err := repo.GetAccountForUpdate(nil, "DOES_NOT_EXIST")
+	_, err := repo.GetAccountForUpdate(context.Background(), nil, "DOES_NOT_EXIST")
 
 	if !errors.Is(err, sql.ErrNoRows) {
 		t.Errorf("expected sql.ErrNoRows, got %v", err)

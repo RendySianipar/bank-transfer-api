@@ -19,6 +19,7 @@ func main() {
 
 	logger := observability.NewLogger()
 
+	// Initialize telemetry
 	ctx := context.Background()
 	shutdownTelemetry, err := observability.Setup(ctx)
 	if err != nil {
@@ -33,6 +34,13 @@ func main() {
 			logger.Error("telemetry shutdown failed", "error", err)
 		}
 	}()
+
+	// Initialize metrics
+	metrics, err := observability.NewMetrics(ctx)
+	if err != nil {
+		logger.Error("metrics initialization failed", "error", err)
+		return
+	}
 
 	db, err := database.Connect()
 	if err != nil {
@@ -51,6 +59,7 @@ func main() {
 		db,
 		accountRepository,
 		idempotencyRepository,
+		metrics,
 	)
 
 	mux := http.NewServeMux()

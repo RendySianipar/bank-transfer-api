@@ -23,10 +23,37 @@ services:
     ports:
       - "3307:3306" # optional - lets you still connect via MySQL Workbench to inspect data
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_PASSWORD}"]
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-uroot",
+          "-p${DB_PASSWORD}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./observability/otel-collector.yaml:/etc/otelcol-contrib/config.yaml
+    ports:
+      - "3417:4317"
+      - "4318:4318"
+    depends_on:
+      - jaeger
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+      - "4317:4317"
 
   app:
     build: .
@@ -38,6 +65,8 @@ services:
         # starting before it's ready to accept connections, so without
         # this, the app would race ahead and fail to connect.
         condition: service_healthy
+      otel-collector:
+        condition: service_started
     environment:
       DB_HOST: mysql # the service name above - Docker's internal DNS resolves this automatically
       DB_PORT: "3306"
@@ -45,6 +74,13 @@ services:
       DB_NAME: bank_transfer_db
       DB_PASSWORD: ${DB_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
+      # Traces endpoint
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      # Metrics endpoint (same as traces for gRPC)
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+      OTEL_SERVICE_NAME: bank-transfer-api
+      APP_ENV: development
     ports:
       - "7070:7070"
 

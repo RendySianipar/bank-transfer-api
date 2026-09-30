@@ -2,9 +2,8 @@ package repository
 
 import (
 	"bank-transfer-api/model"
+	"context"
 	"database/sql"
-
-	_ "github.com/go-sql-driver/mysql"
 )
 
 type AccountRepository struct {
@@ -18,20 +17,22 @@ func NewAccountRepository(db *sql.DB) *AccountRepository {
 }
 
 func (r *AccountRepository) GetAccountForUpdate(
+	ctx context.Context,
 	tx *sql.Tx,
 	accountID string,
 ) (*model.Account, error) {
-
-	var account model.Account
-
-	err := tx.QueryRow(
-		`SELECT id, owner_name, balance, status
+	query := `
+		SELECT id, owner_name, balance, status
 		FROM accounts
 		WHERE id = ?
-		FOR UPDATE`,
-		accountID,
-	).Scan(
+		FOR UPDATE
+	`
+
+	var account model.Account
+	// Use QueryRowContext instead of QueryRow
+	err := tx.QueryRowContext(ctx, query, accountID).Scan(
 		&account.ID,
+		&account.UserID,
 		&account.OwnerName,
 		&account.Balance,
 		&account.Status,
@@ -45,27 +46,26 @@ func (r *AccountRepository) GetAccountForUpdate(
 }
 
 func (r *AccountRepository) GetAccountForUpdateByUser(
+	ctx context.Context,
 	tx *sql.Tx,
 	accountID string,
 	userID string,
 ) (*model.Account, error) {
+	query := `
+		SELECT id, owner_name, balance, status, user_id
+		FROM accounts
+		WHERE id = ? AND user_id = ?
+		FOR UPDATE
+	`
 
 	var account model.Account
-
-	err := tx.QueryRow(
-		`SELECT id, owner_name, balance, status, user_id
-		FROM accounts
-		WHERE id = ?
-			AND user_id = ?
-		FOR UPDATE`,
-		accountID,
-		userID,
-	).Scan(
+	// Use QueryRowContext instead of QueryRow
+	err := tx.QueryRowContext(ctx, query, accountID, userID).Scan(
 		&account.ID,
+		&account.UserID,
 		&account.OwnerName,
 		&account.Balance,
 		&account.Status,
-		&account.UserID,
 	)
 
 	if err != nil {
@@ -76,92 +76,83 @@ func (r *AccountRepository) GetAccountForUpdateByUser(
 }
 
 func (r *AccountRepository) DeductBalance(
+	ctx context.Context,
 	tx *sql.Tx,
 	accountID string,
 	amount int64,
 ) error {
-
-	_, err := tx.Exec(
-		`UPDATE accounts
-		SET balance = balance - ?
-		WHERE id = ?`,
-		amount,
-		accountID,
-	)
-
+	query := `UPDATE accounts SET balance = balance - ? WHERE id = ?`
+	// Use ExecContext instead of Exec
+	_, err := tx.ExecContext(ctx, query, amount, accountID)
 	return err
 }
 
 func (r *AccountRepository) AddBalance(
+	ctx context.Context,
 	tx *sql.Tx,
 	accountID string,
 	amount int64,
 ) error {
-
-	_, err := tx.Exec(
-		`UPDATE accounts
-		SET balance = balance + ?
-		WHERE id = ?`,
-		amount,
-		accountID,
-	)
-
+	query := `UPDATE accounts SET balance = balance + ? WHERE id = ?`
+	// Use ExecContext instead of Exec
+	_, err := tx.ExecContext(ctx, query, amount, accountID)
 	return err
 }
 
 func (r *AccountRepository) CreateTransfer(
+	ctx context.Context,
 	tx *sql.Tx,
 	transfer model.Transfer,
 ) error {
-	_, err := tx.Exec(
-		`INSERT INTO transfers 
-		(
-		id, reference_number, from_account_id, to_account_id, amount, status, created_at
-		)
-		VALUES (?,?,?,?,?,?,?)`,
-		transfer.ID, transfer.ReferenceNumber, transfer.FromAccountID, transfer.ToAccountID, transfer.Amount, transfer.Status, transfer.CreatedAt,
+	query := `
+		INSERT INTO transfers (id, reference_number, from_account_id, to_account_id, amount, status, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`
+	// Use ExecContext instead of Exec
+	_, err := tx.ExecContext(
+		ctx,
+		query,
+		transfer.ID,
+		transfer.ReferenceNumber,
+		transfer.FromAccountID,
+		transfer.ToAccountID,
+		transfer.Amount,
+		transfer.Status,
+		transfer.CreatedAt,
 	)
-
 	return err
 }
 
 func (r *AccountRepository) GetAllTransfer() ([]model.Transfer, error) {
+	query := `
+		SELECT id, reference_number, from_account_id, to_account_id, amount, status, created_at
+		FROM transfers
+		ORDER BY created_at DESC
+	`
 
-	rows, err := r.db.Query(
-		`SELECT id, reference_number, from_account_id, to_account_id, amount, status, created_at
-		 FROM transfers`,
-	)
-
+	rows, err := r.db.Query(query)
 	if err != nil {
 		return nil, err
 	}
-
 	defer rows.Close()
 
-	var allTrf []model.Transfer
-
+	var transfers []model.Transfer
 	for rows.Next() {
-		var trf model.Transfer
-
-		if err := rows.Scan(
-			&trf.ID,
-			&trf.ReferenceNumber,
-			&trf.FromAccountID,
-			&trf.ToAccountID,
-			&trf.Amount,
-			&trf.Status,
-			&trf.CreatedAt,
-		); err != nil {
+		var t model.Transfer
+		err := rows.Scan(
+			&t.ID,
+			&t.ReferenceNumber,
+			&t.FromAccountID,
+			&t.ToAccountID,
+			&t.Amount,
+			&t.Status,
+			&t.CreatedAt,
+		)
+		if err != nil {
 			return nil, err
 		}
-		allTrf = append(allTrf, trf)
+		transfers = append(transfers, t)
 	}
 
-	// rows.Next() also stops on a scan/network error mid-iteration -
-	// rows.Err() surfaces that, since the loop above would otherwise swallow it silently.
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return allTrf, nil
+	return transfers, rows.Err()
 }

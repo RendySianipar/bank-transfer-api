@@ -146,7 +146,7 @@ func (s *TransferService) Transfer(
 
 	// Start transaction with child span
 	var tx *sql.Tx
-	err := spanOperation(ctx, "begin_transaction", func() error {
+	err := spanOperation(ctx, "begin_transaction", func(ctx context.Context) error {
 		var err error
 		tx, err = s.db.BeginTx(ctx, nil)
 		return err
@@ -168,7 +168,7 @@ func (s *TransferService) Transfer(
 
 	// Check idempotency with child span
 	var referenceNumber string
-	err = spanOperation(ctx, "idempotency_lookup", func() error {
+	err = spanOperation(ctx, "idempotency_lookup", func(ctx context.Context) error {
 		var err error
 		referenceNumber, err = s.idempotencyRepository.GetReferenceNumber(
 			ctx,
@@ -203,7 +203,7 @@ func (s *TransferService) Transfer(
 
 	// Get sender account with child span
 	var fromAccount *model.Account
-	err = spanOperation(ctx, "lock_sender_account", func() error {
+	err = spanOperation(ctx, "lock_sender_account", func(ctx context.Context) error {
 		var err error
 		fromAccount, err = s.accountRepository.GetAccountForUpdateByUser(
 			ctx,
@@ -271,7 +271,7 @@ func (s *TransferService) Transfer(
 
 	// Get recipient account with child span
 	var toAccount *model.Account
-	err = spanOperation(ctx, "lock_recipient_account", func() error {
+	err = spanOperation(ctx, "lock_recipient_account", func(ctx context.Context) error {
 		var err error
 		toAccount, err = s.accountRepository.GetAccountForUpdate(
 			ctx,
@@ -323,7 +323,7 @@ func (s *TransferService) Transfer(
 	}
 
 	// Deduct balance with child span
-	err = spanOperation(ctx, "deduct_balance", func() error {
+	err = spanOperation(ctx, "deduct_balance", func(ctx context.Context) error {
 		return s.accountRepository.DeductBalance(
 			ctx,
 			tx,
@@ -346,7 +346,7 @@ func (s *TransferService) Transfer(
 	}
 
 	// Add balance with child span
-	err = spanOperation(ctx, "add_balance", func() error {
+	err = spanOperation(ctx, "add_balance", func(ctx context.Context) error {
 		return s.accountRepository.AddBalance(
 			ctx,
 			tx,
@@ -393,7 +393,7 @@ func (s *TransferService) Transfer(
 	}
 
 	// Create transfer record with child span
-	err = spanOperation(ctx, "create_transfer", func() error {
+	err = spanOperation(ctx, "create_transfer", func(ctx context.Context) error {
 		return s.accountRepository.CreateTransfer(
 			ctx,
 			tx,
@@ -415,7 +415,7 @@ func (s *TransferService) Transfer(
 	}
 
 	// Save idempotency record with child span
-	err = spanOperation(ctx, "save_idempotency", func() error {
+	err = spanOperation(ctx, "save_idempotency", func(ctx context.Context) error {
 		return s.idempotencyRepository.Create(
 			ctx,
 			tx,
@@ -438,7 +438,7 @@ func (s *TransferService) Transfer(
 	}
 
 	// Commit transaction with child span
-	err = spanOperation(ctx, "commit_transaction", func() error {
+	err = spanOperation(ctx, "commit_transaction", func(ctx context.Context) error {
 		return tx.Commit()
 	})
 
@@ -473,12 +473,12 @@ func (s *TransferService) Transfer(
 func spanOperation(
 	ctx context.Context,
 	name string,
-	fn func() error,
+	fn func(context.Context) error,
 ) error {
 	ctx, span := tracer.Start(ctx, name)
 	defer span.End()
 
-	if err := fn(); err != nil {
+	if err := fn(ctx); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return err

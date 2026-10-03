@@ -32,7 +32,6 @@ func (r *AccountRepository) GetAccountForUpdate(
 	// Use QueryRowContext instead of QueryRow
 	err := tx.QueryRowContext(ctx, query, accountID).Scan(
 		&account.ID,
-		&account.UserID,
 		&account.OwnerName,
 		&account.Balance,
 		&account.Status,
@@ -62,10 +61,10 @@ func (r *AccountRepository) GetAccountForUpdateByUser(
 	// Use QueryRowContext instead of QueryRow
 	err := tx.QueryRowContext(ctx, query, accountID, userID).Scan(
 		&account.ID,
-		&account.UserID,
 		&account.OwnerName,
 		&account.Balance,
 		&account.Status,
+		&account.UserID,
 	)
 
 	if err != nil {

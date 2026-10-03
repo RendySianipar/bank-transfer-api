@@ -37,7 +37,7 @@ func (r *IdempotencyRepository) Create(
 	referenceNumber string,
 ) error {
 	query := `
-		INSERT INTO idempotency_keys (idempotency_key, reference_number)
+		INSERT INTO idempotency_keys (idempotency_key, reference_number, created_at)
 		VALUES (?, ?, NOW())
 	`
 	// Use ExecContext instead of Exec
